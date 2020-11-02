@@ -1,4 +1,4 @@
-from debug_project_app import app, Message, mail
+from debug_project_app import app, Message, mail, db
 from flask import render_template, request, redirect, url_for
 
 # Import for Forms
@@ -10,50 +10,57 @@ from debug_project_app.models import User, Post, check_password_hash
 # Import for Flask Login - login_required, login_user,current_user, logout_user
 from flask_login import login_required,login_user, current_user,logout_user
 
+from sqlalchemy.exc import IntegrityError
+
 # Home Route
 @app.route('/')
 def home():
-    posts = Post.query.all
-    returnrender_template("homes.html", posts = posts)
+    posts = Post.query.all()
+    return render_template('home.html', posts = posts)
 
 # Register Route
 @app.route('/register', methods=['GET','POST'])
 def register():
     form = UserInfoForm()
-    if request.method = 'POST' and form.validate():
+    if request.method == 'POST' and form.validate():
         # Get Information
         username = form.username.data
         password = form.password.data
-        email = form.email
+        email = form.email.data
         print("\n",username,password,email)
         # Create an instance of User
         user = User(username,email,password)
         # Open and insert into database
-        db.session.add(user)
-        # Save info into database
-        db.session.commit()
-
+        
+        try:
+            db.session.add(user)
+            # Save info into database
+            db.session.commit()
+        except IntegrityError:
+            #return f'username and/or email is not available please re-enter a unique username and email'
+            db.session.rollback()
+            return redirect(url_for('home'))       
         # Flask Email Sender 
-        msg = Message(f'Thanks for Signing Up! {email}', recipients=[email])
-        msg.body = ('Congrats on signing up! Looking forward to your posts!')
-        msg.html = ('<h1> Welcome to debug_project_app!</h1>' '<p> This will be fun! </p>')
-
-        mail.send(msg)
+        # msg = Message(f'Thanks for Signing Up! {email}', recipients=[email])
+        # msg.body = ('Congrats on signing up! Looking forward to your posts!')
+        # msg.html = ('<h1> Welcome to debug_project_app!</h1>' '<p> This will be fun! </p>')
+        # mail.send(msg)
+        return redirect(url_for('home'))
     return render_template('register.html',form = form)
 
 # Post Submission Route
 @app.route('/posts', methods=['GET','POST'])
 @login_required
 def posts():
-    post = PostForm
+    post = PostForm()
     if request.method == 'POST' and post.validate():
         title = post.title.data
         content = post.content.data
-        user_id = current_user
+        user_id = current_user.id
         print('\n',title,content)
         post = Post(title,content,user_id)
 
-        db.session.add(post,posts)
+        db.session.add(post)
 
         db.session.commit()
         return redirect(url_for('posts'))
@@ -64,7 +71,6 @@ def posts():
 def post_detail(post_id):
     post = Post.query.get_or_404(post_id)
     return render_template('post_detail.html', post = post)
-
 
 @app.route('/posts/update/<int:post_id>', methods = ['GET', 'POST'])
 @login_required
@@ -110,7 +116,6 @@ def login():
             return redirect(url_for('login'))
 
     return render_template('login.html',form = form)
-
 
 @app.route('/logout')
 @login_required
